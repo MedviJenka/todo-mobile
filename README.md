@@ -20,7 +20,8 @@ src/
     (app)/index.tsx             # task list + mic (NativeTabs)
     (app)/settings.tsx          # active hours, buffer, reminder, sign out, delete all data
     task/[id].tsx               # edit sheet (formSheet)
-  components/                   # capture panel, mic, task row, ui/ primitives
+  components/                   # capture panel, mic, task row, ui/ primitives (aurora, rainbow ring, …)
+  constants/theme.ts            # design tokens: palette, rainbow spectra, gradient helper, spacing
   features/capture/             # recorder hook, run-capture pipeline, capture state
   features/tasks/               # task operations (row + event kept in sync), list grouping
   lib/
@@ -38,6 +39,10 @@ supabase/
   functions/google-token/       # holds the Google refresh token, mints Calendar access tokens
   evals/                        # golden transcripts + scorer for prompt/model changes
 ```
+
+## Design
+
+Neutral surfaces, one brand blue, and a rainbow spectrum used only as an accent: the drifting aurora behind screen headers, the ring around the mic, progress bars and completed checks. Content always sits on solid cards, so text contrast never depends on the gradient. Gradients are React Native's built-in `backgroundImage` (no native gradient module) and motion is Reanimated 4: slow loops, springy presses, layout transitions when tasks move. Every looping animation holds still when the system's Reduce Motion setting is on.
 
 ## One-time setup
 

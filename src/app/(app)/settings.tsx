@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Aurora } from '@/components/ui/aurora';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
 import { useErrorAlert } from '@/hooks/use-error-alert';
+import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/lib/auth';
 import { deleteAllUserData, type UserSettings } from '@/lib/db';
 import { deviceTimeZone } from '@/lib/device';
@@ -84,15 +86,18 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
 
   return (
     <ThemedView style={styles.container}>
+      <Aurora height={insets.top + 200} />
       <ScrollView
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
+          { paddingTop: insets.top + Spacing.four, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
         ]}>
-        <ThemedText type="subtitle">Settings</ThemedText>
+        <ThemedText type="title">Settings</ThemedText>
 
-        <Section title="Scheduling">
+        <Section
+          title="Scheduling"
+          footer="New tasks are booked inside these hours, never on top of busy time in your primary calendar.">
           <Stepper
             label="Day starts"
             value={start}
@@ -102,6 +107,7 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
             format={formatTimeOfDay}
             onChange={(v) => set({ dayStart: formatTimeOfDay(v) })}
           />
+          <Divider />
           <Stepper
             label="Day ends"
             value={end}
@@ -111,6 +117,7 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
             format={formatTimeOfDay}
             onChange={(v) => set({ dayEnd: formatTimeOfDay(v) })}
           />
+          <Divider />
           <Stepper
             label="Buffer between items"
             value={draft.bufferMinutes}
@@ -120,6 +127,7 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
             format={minutes}
             onChange={(v) => set({ bufferMinutes: v })}
           />
+          <Divider />
           <Stepper
             label="Reminder before"
             value={draft.reminderMinutes}
@@ -129,75 +137,85 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
             format={(v) => (v === 0 ? 'None' : minutes(v))}
             onChange={(v) => set({ reminderMinutes: v })}
           />
+          <Divider />
           <View style={styles.row}>
             <ThemedText>Time zone</ThemedText>
-            <ThemedText type="smallBold">{draft.timeZone}</ThemedText>
+            <ThemedText type="smallBold" themeColor="textSecondary" numberOfLines={1} style={styles.shrink}>
+              {draft.timeZone}
+            </ThemedText>
           </View>
           {deviceZone !== draft.timeZone && (
-            <Button title={`Use this device’s zone (${deviceZone})`} onPress={() => set({ timeZone: deviceZone })} />
+            <Button title={`Use this device’s zone (${deviceZone})`} size="compact" onPress={() => set({ timeZone: deviceZone })} />
           )}
-          {dirty && <Button title="Save changes" variant="primary" loading={busy === 'save'} onPress={save} />}
-          <ThemedText type="small" themeColor="textSecondary">
-            New tasks are booked inside these hours, never on top of busy time in your primary calendar.
-          </ThemedText>
+          {dirty && <Button title="Save changes" variant="primary" loading={busy === 'save'} onPress={save} style={styles.save} />}
         </Section>
 
-        <Section title="Google Calendar">
-          <ThemedText type="small" themeColor="textSecondary">
-            Tasks go into the “{APP_CALENDAR_NAME}” calendar. Only your primary calendar counts as busy.
-          </ThemedText>
-          <Button title="Reconnect calendar" onPress={markCalendarDisconnected} />
+        <Section title="Google Calendar" footer={`Tasks go into the “${APP_CALENDAR_NAME}” calendar. Only your primary calendar counts as busy.`}>
+          <Button title="Reconnect calendar" onPress={markCalendarDisconnected} style={styles.save} />
         </Section>
 
-        <Section title="Account">
+        <Section title="Account" footer="Audio is never stored. Transcripts are kept as capture history until you delete your data.">
           <View style={styles.row}>
             <ThemedText>Signed in as</ThemedText>
-            <ThemedText type="smallBold" numberOfLines={1} style={styles.shrink}>
+            <ThemedText type="smallBold" themeColor="textSecondary" numberOfLines={1} style={styles.shrink}>
               {session?.user.email ?? '—'}
             </ThemedText>
           </View>
-          <Button
-            title="Sign out"
-            loading={busy === 'signout'}
-            onPress={async () => {
-              setBusy('signout');
-              await signOut().catch((e) => showError(e, "Couldn't sign out"));
-              setBusy(null);
-            }}
-          />
-          <Button
-            title="Delete all data"
-            variant="destructive"
-            loading={busy === 'delete'}
-            onPress={confirmDelete}
-          />
-          <ThemedText type="small" themeColor="textSecondary">
-            Audio is never stored. Transcripts are kept as capture history until you delete your data.
-          </ThemedText>
+          <View style={styles.buttons}>
+            <Button
+              title="Sign out"
+              loading={busy === 'signout'}
+              onPress={async () => {
+                setBusy('signout');
+                await signOut().catch((e) => showError(e, "Couldn't sign out"));
+                setBusy(null);
+              }}
+            />
+            <Button title="Delete all data" variant="destructive" loading={busy === 'delete'} onPress={confirmDelete} />
+          </View>
         </Section>
       </ScrollView>
     </ThemedView>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, footer, children }: { title: string; footer?: string; children: ReactNode }) {
+  const theme = useTheme();
   return (
     <View style={styles.section}>
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        {title.toUpperCase()}
+      <ThemedText type="label" themeColor="textSecondary" style={styles.inset}>
+        {title}
       </ThemedText>
-      <ThemedView type="backgroundElement" style={styles.sectionBody}>
-        {children}
-      </ThemedView>
+      <View style={[styles.sectionBody, { backgroundColor: theme.surface, boxShadow: theme.shadowCard }]}>{children}</View>
+      {footer && (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.inset}>
+          {footer}
+        </ThemedText>
+      )}
     </View>
   );
 }
 
+function Divider() {
+  const theme = useTheme();
+  return <View style={[styles.divider, { backgroundColor: theme.border }]} />;
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: Spacing.four, gap: Spacing.four },
+  content: { paddingHorizontal: Spacing.three + 4, gap: Spacing.four },
   section: { gap: Spacing.two },
-  sectionBody: { borderRadius: 16, padding: Spacing.three, gap: Spacing.two },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40, gap: Spacing.three },
+  inset: { paddingHorizontal: Spacing.one },
+  sectionBody: {
+    borderRadius: Radius.large,
+    borderCurve: 'continuous',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    gap: Spacing.one,
+  },
+  divider: { height: StyleSheet.hairlineWidth },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, gap: Spacing.three },
   shrink: { flexShrink: 1 },
+  save: { marginVertical: Spacing.two },
+  buttons: { gap: Spacing.two, paddingBottom: Spacing.two },
 });

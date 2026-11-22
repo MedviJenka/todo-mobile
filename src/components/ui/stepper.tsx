@@ -1,6 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { PressableScale } from '@/components/ui/pressable-scale';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -27,19 +29,21 @@ export function Stepper({
     const next = value + delta;
     const disabled = next < min || next > max;
     return (
-      <Pressable
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={`${a11y} ${label}`}
         disabled={disabled}
         hitSlop={6}
-        onPress={() => onChange(next)}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: theme.backgroundSelected },
-          (pressed || disabled) && styles.dimmed,
-        ]}>
-        <ThemedText type="smallBold">{symbol}</ThemedText>
-      </Pressable>
+        scaleTo={0.88}
+        onPress={() => {
+          Haptics.selectionAsync().catch(() => undefined);
+          onChange(next);
+        }}
+        style={[styles.button, { backgroundColor: theme.backgroundElement }, disabled && styles.disabled]}>
+        <ThemedText type="heading" style={styles.symbol}>
+          {symbol}
+        </ThemedText>
+      </PressableScale>
     );
   };
 
@@ -61,7 +65,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 },
   label: { flexShrink: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  button: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  value: { minWidth: 64, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  dimmed: { opacity: 0.4 },
+  button: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  symbol: { fontSize: 20, lineHeight: 24, fontWeight: 500 },
+  value: { minWidth: 72, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  disabled: { opacity: 0.35 },
 });

@@ -1,7 +1,7 @@
 import type { Task } from '@/lib/db';
 import { localDateTimeToEpoch } from '@/lib/time';
 
-import { describeUnscheduled, formatDuration, groupTasks } from './present';
+import { describeUnscheduled, formatDuration, groupTasks, todayProgress } from './present';
 
 const TZ = 'Europe/Berlin';
 const at = (s: string) => localDateTimeToEpoch(s, TZ)!;
@@ -73,5 +73,27 @@ describe('wording', () => {
       deadline: localDateTimeToEpoch('2026-11-27', TZ, 'endOfDay'),
     });
     expect(describeUnscheduled(t, TZ, NOW)).toMatch(/^No 3 h gap before .*27/);
+  });
+});
+
+describe('todayProgress', () => {
+  it('counts tasks done today against those still due today', () => {
+    const progress = todayProgress(
+      [
+        task({ status: 'done', completedAt: at('2026-11-23T08:00') }),
+        task({ status: 'done', completedAt: at('2026-11-22T18:00') }), // yesterday: not counted
+        task({ scheduledStart: at('2026-11-23T15:00'), scheduledEnd: at('2026-11-23T16:00') }),
+        task({ scheduledStart: at('2026-11-22T10:00'), scheduledEnd: at('2026-11-22T11:00') }), // overdue: due today
+        task({ scheduledStart: at('2026-11-24T09:00'), scheduledEnd: at('2026-11-24T10:00') }), // tomorrow
+        task({}), // unscheduled
+      ],
+      TZ,
+      NOW
+    );
+    expect(progress).toEqual({ done: 1, total: 3 });
+  });
+
+  it('is empty when nothing is due or done today', () => {
+    expect(todayProgress([task({})], TZ, NOW)).toEqual({ done: 0, total: 0 });
   });
 });

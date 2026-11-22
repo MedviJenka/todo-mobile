@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Aurora } from '@/components/ui/aurora';
 import { Button } from '@/components/ui/button';
+import { FeatureRow } from '@/components/ui/feature-row';
 import { Icon } from '@/components/ui/icon';
+import { RainbowRing } from '@/components/ui/rainbow-ring';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/lib/auth';
@@ -20,8 +24,11 @@ const POINTS = [
   'Only your primary calendar counts as busy for now.',
 ];
 
+const rise = (step: number) => FadeInDown.delay(80 + step * 90).duration(520);
+
 export default function ConnectCalendarScreen() {
   const theme = useTheme();
+  const { height } = useWindowDimensions();
   const { connectCalendar, settings } = useSettings();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,36 +49,40 @@ export default function ConnectCalendarScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Aurora height={height * 0.5} />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.hero}>
-          <Icon ios="calendar.badge.plus" android="calendar_add_on" size={56} color={theme.tint} />
-          <ThemedText type="subtitle" style={styles.center}>
-            {reconnecting ? 'Reconnect your calendar' : 'Connect Google Calendar'}
-          </ThemedText>
-          <View style={styles.points}>
+          <Animated.View entering={rise(0)}>
+            <RainbowRing size={96} thickness={4} periodMs={9000} centerColor={theme.surface}>
+              <Icon ios="calendar.badge.plus" android="calendar_add_on" size={38} color={theme.tint} />
+            </RainbowRing>
+          </Animated.View>
+          <Animated.View entering={rise(1)}>
+            <ThemedText type="title" style={styles.center}>
+              {reconnecting ? 'Reconnect your calendar' : 'Connect Google Calendar'}
+            </ThemedText>
+          </Animated.View>
+          <Animated.View entering={rise(2)} style={[styles.points, { backgroundColor: theme.surface, boxShadow: theme.shadowCard }]}>
             {POINTS.map((point) => (
-              <View key={point} style={styles.point}>
-                <Icon ios="checkmark.circle.fill" android="check_circle" size={18} color={theme.success} />
-                <ThemedText type="small" themeColor="textSecondary" style={styles.pointText}>
-                  {point}
-                </ThemedText>
-              </View>
+              <FeatureRow key={point} icon={{ ios: 'checkmark', android: 'check' }} color={theme.success} text={point} />
             ))}
-          </View>
+          </Animated.View>
         </View>
 
-        <Button
-          title={reconnecting ? 'Reconnect' : 'Connect calendar'}
-          variant="primary"
-          loading={busy}
-          onPress={handleConnect}
-        />
-        {error && (
-          <ThemedText type="small" style={[styles.center, { color: theme.danger }]} accessibilityRole="alert">
-            {error}
-          </ThemedText>
-        )}
-        <Button title="Sign out" variant="plain" disabled={busy} onPress={() => void signOut()} />
+        <Animated.View entering={FadeInUp.delay(420).duration(520)} style={styles.footer}>
+          <Button
+            title={reconnecting ? 'Reconnect' : 'Connect calendar'}
+            variant="primary"
+            loading={busy}
+            onPress={handleConnect}
+          />
+          {error && (
+            <ThemedText type="small" style={[styles.center, { color: theme.danger }]} accessibilityRole="alert">
+              {error}
+            </ThemedText>
+          )}
+          <Button title="Sign out" variant="plain" disabled={busy} onPress={() => void signOut()} />
+        </Animated.View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -83,12 +94,10 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: MaxContentWidth,
     paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.four,
-    gap: Spacing.two,
+    paddingBottom: Spacing.three,
   },
-  hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.three },
+  hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.four },
   center: { textAlign: 'center' },
-  points: { gap: Spacing.two, alignSelf: 'stretch' },
-  point: { flexDirection: 'row', gap: Spacing.two, alignItems: 'flex-start' },
-  pointText: { flex: 1 },
+  points: { alignSelf: 'stretch', borderRadius: 20, borderCurve: 'continuous', padding: Spacing.three, gap: Spacing.three },
+  footer: { gap: Spacing.two },
 });

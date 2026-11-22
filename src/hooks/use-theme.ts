@@ -1,8 +1,8 @@
 import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { Themes, type Theme } from '@/constants/theme';
 
-/** The color palette for the current light/dark appearance. */
-export function useTheme() {
-  return Colors[useColorScheme() === 'dark' ? 'dark' : 'light'];
+/** Colors and shadows for the current light/dark appearance. */
+export function useTheme(): Theme {
+  return Themes[useColorScheme() === 'dark' ? 'dark' : 'light'];
 }

@@ -38,6 +38,22 @@ export function groupTasks(tasks: readonly Task[], timeZone: string, now: number
   return sections.filter(([, data]) => data.length > 0).map(([key, data]) => ({ key, title: TITLES[key], data }));
 }
 
+/** Today's tally: tasks completed today vs. those still due today (overdue included). */
+export function todayProgress(tasks: readonly Task[], timeZone: string, now: number): { done: number; total: number } {
+  const today = dateKeyAt(now, timeZone);
+  const tomorrow = epochAt(addDays(today, 1), 0, timeZone);
+  let done = 0;
+  let left = 0;
+  for (const t of tasks) {
+    if (t.status === 'done') {
+      if (t.completedAt !== null && dateKeyAt(t.completedAt, timeZone) === today) done++;
+    } else if (t.scheduledStart !== null && t.scheduledStart < tomorrow) {
+      left++;
+    }
+  }
+  return { done, total: done + left };
+}
+
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

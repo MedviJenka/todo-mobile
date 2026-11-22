@@ -1,7 +1,7 @@
-import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/pressable-scale';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Variant = 'primary' | 'secondary' | 'destructive' | 'plain';
@@ -10,6 +10,7 @@ export function Button({
   title,
   onPress,
   variant = 'secondary',
+  size = 'regular',
   loading = false,
   disabled = false,
   style,
@@ -17,6 +18,8 @@ export function Button({
   title: string;
   onPress: () => void;
   variant?: Variant;
+  /** `compact` for actions inside cards. */
+  size?: 'regular' | 'compact';
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -34,37 +37,42 @@ export function Button({
     destructive: theme.danger,
     plain: theme.tint,
   }[variant];
+  const inactive = disabled || loading;
 
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
-      accessibilityState={{ disabled: disabled || loading, busy: loading }}
-      disabled={disabled || loading}
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      disabled={inactive}
       onPress={onPress}
-      style={({ pressed }) => [
+      scaleTo={0.97}
+      style={[
         styles.button,
+        size === 'compact' && styles.compact,
         { backgroundColor: background },
-        (pressed || disabled) && styles.dimmed,
+        disabled && styles.disabled,
         style,
       ]}>
       {loading ? (
         <ActivityIndicator color={foreground} />
       ) : (
-        <ThemedText type="smallBold" style={{ color: foreground }}>
-          {title}
-        </ThemedText>
+        <Text style={[styles.title, size === 'compact' && styles.compactTitle, { color: foreground }]}>{title}</Text>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: Spacing.four,
-    borderRadius: 14,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
+    borderCurve: 'continuous',
   },
-  dimmed: { opacity: 0.55 },
+  compact: { minHeight: 38, paddingHorizontal: Spacing.three, borderRadius: Radius.small },
+  title: { fontSize: 16, lineHeight: 21, fontWeight: 600 },
+  compactTitle: { fontSize: 14, lineHeight: 19 },
+  disabled: { opacity: 0.45 },
 });

@@ -1,19 +1,18 @@
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 // Route guarding happens in the root Stack (NativeTabs has no Protected).
 // Screens pad for safe area + tab bar themselves (disableAutomaticContentInsets), the same on both platforms.
 export default function AppTabsLayout() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const theme = useTheme();
 
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      backgroundColor={theme.surface}
+      tintColor={theme.tint}
+      indicatorColor={theme.backgroundSelected}
+      labelStyle={{ selected: { color: theme.text } }}>
       <NativeTabs.Trigger name="index" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />

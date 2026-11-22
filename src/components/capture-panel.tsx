@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { LevelMeter } from '@/components/level-meter';
 import { MicButton } from '@/components/mic-button';
@@ -8,17 +9,26 @@ import { TextCaptureSheet } from '@/components/text-capture-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Spacing } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/pressable-scale';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { Radius, Spacing } from '@/constants/theme';
 import { useNow } from '@/hooks/use-now';
 import { useTheme } from '@/hooks/use-theme';
 import { describeError, toAppError } from '@/lib/errors';
 import { formatSlot } from '@/lib/time';
 import { useCapture, type CaptureState } from '@/features/capture/capture-provider';
-import type { CaptureOutcome } from '@/features/capture/run-capture';
+import type { CaptureOutcome, CaptureStage } from '@/features/capture/run-capture';
 import { describePlacementReason, describeUnscheduled, formatDuration } from '@/features/tasks/present';
 import { useSettings } from '@/providers/settings-provider';
 
-const STAGE_LABEL = { transcribing: 'Transcribing…', planning: 'Planning…', booking: 'Booking…' } as const;
+const STAGES: { stage: CaptureStage; label: string; activeLabel: string }[] = [
+  { stage: 'transcribing', label: 'Transcribe', activeLabel: 'Transcribing…' },
+  { stage: 'planning', label: 'Plan', activeLabel: 'Planning…' },
+  { stage: 'booking', label: 'Book', activeLabel: 'Booking…' },
+];
+
+const enter = FadeInDown.springify().damping(20).stiffness(220);
+const exit = FadeOutDown.duration(160);
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
@@ -28,51 +38,58 @@ export function CapturePanel({ timeZone }: { timeZone: string }) {
   const { state, recorder, startRecording, submitText, dismiss } = useCapture();
   const [sheet, setSheet] = useState<{ title: string; text: string; captureId: string | null } | null>(null);
 
-  const recording = recorder.phase === 'recording' || recorder.phase === 'stopping';
-  const busy = state.kind === 'working' || recorder.phase === 'starting' || recorder.phase === 'stopping';
+  // "starting" already looks like recording: the button answers the tap at once.
+  const recording = recorder.phase === 'starting' || recorder.phase === 'recording';
+  const busy = state.kind === 'working' || recorder.phase === 'stopping';
+  const level = recorder.levels[recorder.levels.length - 1] ?? 0;
 
   const openSheet = (title: string, text = '', captureId: string | null = null) => setSheet({ title, text, captureId });
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       {state.kind === 'result' && !recording && (
-        <ResultCard state={state} timeZone={timeZone} onEditTranscript={openSheet} />
+        <ResultCard key="result" state={state} timeZone={timeZone} onEditTranscript={openSheet} />
       )}
-      {state.kind === 'error' && !recording && <ErrorCard state={state} onEditTranscript={openSheet} />}
+      {state.kind === 'error' && !recording && <ErrorCard key="error" state={state} onEditTranscript={openSheet} />}
       {state.kind === 'working' && (
-        <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold">{STAGE_LABEL[state.stage]}</ThemedText>
+        <Card key="working">
+          <StageSteps current={state.stage} />
+          <ProgressBar height={4} />
           {state.transcript && (
             <ThemedText type="small" themeColor="textSecondary" numberOfLines={3}>
               “{state.transcript}”
             </ThemedText>
           )}
-        </View>
+        </Card>
       )}
 
       {recording && (
-        <View style={styles.recording}>
+        <Animated.View entering={enter} exiting={exit} style={styles.recording}>
+          <ThemedText type="label" themeColor="textSecondary">
+            Listening
+          </ThemedText>
           <LevelMeter levels={recorder.levels} />
           <ThemedText type="small" themeColor="textSecondary" style={styles.timer}>
             {clock(recorder.elapsedSeconds)} / {clock(recorder.maxSeconds)}
           </ThemedText>
-        </View>
+        </Animated.View>
       )}
 
-      <View style={styles.controls}>
+      <View style={styles.controls} pointerEvents="box-none">
         <View style={styles.side}>
           {recording ? (
             <RoundButton label="Cancel recording" onPress={() => void recorder.cancel()}>
-              <Icon ios="xmark" android="close" color={theme.text} />
+              <Icon ios="xmark" android="close" size={18} color={theme.text} />
             </RoundButton>
           ) : (
             <RoundButton label="Type tasks instead" disabled={busy} onPress={() => openSheet('Type your tasks')}>
-              <Icon ios="keyboard" android="keyboard" color={theme.text} />
+              <Icon ios="keyboard" android="keyboard" size={20} color={theme.text} />
             </RoundButton>
           )}
         </View>
         <MicButton
           mode={busy ? 'busy' : recording ? 'recording' : 'idle'}
+          level={level}
           onPress={() => {
             if (recording) void recorder.stop();
             else {
@@ -86,7 +103,6 @@ export function CapturePanel({ timeZone }: { timeZone: string }) {
 
       {sheet && (
         <TextCaptureSheet
-          visible
           title={sheet.title}
           initialText={sheet.text}
           onCancel={() => setSheet(null)}
@@ -101,6 +117,47 @@ export function CapturePanel({ timeZone }: { timeZone: string }) {
   );
 }
 
+function Card({ children, alert }: { children: ReactNode; alert?: boolean }) {
+  const theme = useTheme();
+  return (
+    <Animated.View
+      entering={enter}
+      exiting={exit}
+      accessibilityRole={alert ? 'alert' : undefined}
+      style={[
+        styles.card,
+        { backgroundColor: theme.surface, borderColor: theme.border, boxShadow: theme.shadowFloat },
+      ]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function StageSteps({ current }: { current: CaptureStage }) {
+  const theme = useTheme();
+  const currentIndex = STAGES.findIndex((s) => s.stage === current);
+  return (
+    <View style={styles.steps}>
+      {STAGES.map(({ stage, label, activeLabel }, i) => {
+        const done = i < currentIndex;
+        const active = i === currentIndex;
+        return (
+          <View key={stage} style={styles.step}>
+            {done ? (
+              <Icon ios="checkmark.circle.fill" android="check_circle" size={16} color={theme.success} />
+            ) : (
+              <View style={[styles.stepDot, { backgroundColor: active ? theme.tint : theme.backgroundSelected }]} />
+            )}
+            <ThemedText type={active ? 'smallBold' : 'small'} themeColor={active || done ? 'text' : 'textSecondary'}>
+              {active ? activeLabel : label}
+            </ThemedText>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function RoundButton({
   label,
   onPress,
@@ -110,23 +167,24 @@ function RoundButton({
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const theme = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
       hitSlop={8}
-      style={({ pressed }) => [
+      scaleTo={0.9}
+      style={[
         styles.round,
-        { backgroundColor: theme.backgroundElement },
-        (pressed || disabled) && { opacity: 0.5 },
+        { backgroundColor: theme.surface, borderColor: theme.border, boxShadow: theme.shadowCard },
+        disabled && styles.disabled,
       ]}>
       {children}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -157,29 +215,40 @@ function ResultCard({
   const { outcome } = state;
   const secondsLeft = Math.ceil((state.undoUntil - now) / 1000);
   const canUndo = outcome.tasks.length > 0 && secondsLeft > 0;
+  const found = outcome.tasks.length > 0;
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
-      <ThemedText type="smallBold">{summarize(outcome)}</ThemedText>
+    <Card>
+      <View style={styles.cardHeader}>
+        <Icon
+          ios={found ? 'checkmark.circle.fill' : 'questionmark.circle'}
+          android={found ? 'check_circle' : 'help'}
+          size={20}
+          color={found ? theme.success : theme.textSecondary}
+        />
+        <ThemedText type="smallBold" style={styles.flex}>
+          {summarize(outcome)}
+        </ThemedText>
+      </View>
       <ScrollView style={styles.resultList} contentContainerStyle={styles.resultListContent}>
-        {outcome.tasks.map((task) => (
-          <View key={task.id} style={styles.resultRow}>
-            <ThemedText numberOfLines={1} style={styles.resultTitle}>
-              {task.title}
-            </ThemedText>
-            <ThemedText
-              type="small"
-              themeColor="textSecondary"
-              style={task.unscheduledReason && task.scheduledStart === null && { color: theme.danger }}>
-              {task.scheduledStart !== null && task.scheduledEnd !== null
-                ? `${formatSlot(task.scheduledStart, task.scheduledEnd, timeZone, now)} · ${describePlacementReason(task, timeZone, now)}`
-                : task.unscheduledReason
-                  ? describeUnscheduled(task, timeZone, now)
-                  : `List only · ${formatDuration(task.durationMinutes)}`}
-            </ThemedText>
-          </View>
-        ))}
-        {outcome.tasks.length === 0 && (
+        {outcome.tasks.map((task) => {
+          const problem = task.scheduledStart === null && !!task.unscheduledReason;
+          return (
+            <View key={task.id} style={[styles.resultRow, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText numberOfLines={1} style={styles.resultTitle}>
+                {task.title}
+              </ThemedText>
+              <ThemedText type="small" style={[styles.resultMeta, { color: problem ? theme.warning : theme.textSecondary }]}>
+                {task.scheduledStart !== null && task.scheduledEnd !== null
+                  ? `${formatSlot(task.scheduledStart, task.scheduledEnd, timeZone, now)} · ${describePlacementReason(task, timeZone, now)}`
+                  : problem
+                    ? describeUnscheduled(task, timeZone, now)
+                    : `List only · ${formatDuration(task.durationMinutes)}`}
+              </ThemedText>
+            </View>
+          );
+        })}
+        {!found && (
           <ThemedText type="small" themeColor="textSecondary">
             “{outcome.transcript}”
           </ThemedText>
@@ -196,24 +265,24 @@ function ResultCard({
         )}
       </ScrollView>
       <View style={styles.cardActions}>
-        {outcome.tasks.length === 0 && (
+        {!found && (
           <Button
             title="Edit transcript"
+            size="compact"
             onPress={() => onEditTranscript('Edit transcript', outcome.transcript, outcome.captureId)}
           />
         )}
         {canUndo && (
           <Button
-            title={`Undo (${secondsLeft})`}
+            title={`Undo · ${secondsLeft}`}
+            size="compact"
             loading={state.undoing}
-            onPress={() =>
-              undo().catch((e) => Alert.alert("Couldn't undo", describeError(toAppError(e))))
-            }
+            onPress={() => undo().catch((e) => Alert.alert("Couldn't undo", describeError(toAppError(e))))}
           />
         )}
-        <Button title="Done" variant="primary" onPress={dismiss} />
+        <Button title="Done" size="compact" variant="primary" onPress={dismiss} />
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -230,48 +299,70 @@ function ErrorCard({
   const { error } = state;
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement }]} accessibilityRole="alert">
-      <ThemedText type="smallBold" style={{ color: theme.danger }}>
-        {describeError(error)}
-      </ThemedText>
+    <Card alert>
+      <View style={styles.cardHeader}>
+        <Icon ios="exclamationmark.triangle.fill" android="warning" size={18} color={theme.danger} />
+        <ThemedText type="smallBold" style={styles.flex}>
+          {describeError(error)}
+        </ThemedText>
+      </View>
       {state.transcript && (
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={3}>
           “{state.transcript}”
         </ThemedText>
       )}
       <View style={styles.cardActions}>
-        <Button title="Dismiss" variant="plain" onPress={dismiss} />
+        <Button title="Dismiss" size="compact" variant="plain" onPress={dismiss} />
         {error.code === 'mic_denied' && (
-          <Button title="Open Settings" variant="primary" onPress={() => void Linking.openSettings()} />
+          <Button title="Open Settings" size="compact" variant="primary" onPress={() => void Linking.openSettings()} />
         )}
         {error.code === 'calendar_disconnected' && (
-          <Button title="Reconnect" variant="primary" onPress={markCalendarDisconnected} />
+          <Button title="Reconnect" size="compact" variant="primary" onPress={markCalendarDisconnected} />
         )}
         {state.transcript && (
           <Button
             title="Edit"
+            size="compact"
             onPress={() => onEditTranscript('Edit transcript', state.transcript ?? '', state.captureId)}
           />
         )}
-        {state.retry && (
-          <Button title="Retry" variant="primary" onPress={retry} />
-        )}
+        {state.retry && <Button title="Retry" size="compact" variant="primary" onPress={retry} />}
       </View>
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.three, paddingHorizontal: Spacing.three },
-  card: { borderRadius: 20, padding: Spacing.three, gap: Spacing.two },
-  resultList: { maxHeight: 220 },
-  resultListContent: { gap: Spacing.two },
-  resultRow: { gap: 1 },
-  resultTitle: { fontSize: 15, lineHeight: 20 },
+  card: {
+    borderRadius: Radius.large + 2,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.three,
+    gap: Spacing.two + 2,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  flex: { flex: 1 },
+  steps: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepDot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 4 },
+  resultList: { maxHeight: 232 },
+  resultListContent: { gap: 6 },
+  resultRow: { borderRadius: Radius.small + 2, borderCurve: 'continuous', paddingHorizontal: 12, paddingVertical: 8, gap: 1 },
+  resultTitle: { fontSize: 15, lineHeight: 20, fontWeight: 500 },
+  resultMeta: { fontSize: 13, lineHeight: 18 },
   cardActions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: Spacing.two },
   recording: { alignItems: 'center', gap: Spacing.one },
   timer: { fontVariant: ['tabular-nums'] },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.five },
   side: { width: 48, alignItems: 'center' },
-  round: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  round: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabled: { opacity: 0.45 },
 });
