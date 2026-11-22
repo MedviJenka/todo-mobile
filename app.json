@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "todo",
+    "name": "Voice To-Do",
     "slug": "todo",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,35 +8,50 @@
     "scheme": "todo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/app.icon",
+      "bundleIdentifier": "com.medvijenia.todo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#2F6FE4",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "predictiveBackGestureEnabled": false,
+      "package": "com.medvijenia.todo"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#2F6FE4",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 160
         }
-      ]
+      ],
+      "expo-sqlite",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Voice To-Do uses the microphone so you can speak your tasks. Audio is sent for transcription and is not stored."
+        }
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2002723f-6d82-407f-9496-7ebeac17dc7d"
+      }
+    },
+    "owner": "medvijenia"
   }
 }

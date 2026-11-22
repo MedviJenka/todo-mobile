@@ -1,0 +1,29 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:openai@^7.62.0": "7.62.0_zod@4.6.7",
+    "npm:zod@^4.6.7": "4.6.7"
+  },
+  "npm": {
+    "openai@7.62.0_zod@4.6.7": {
+      "integrity": "sha512-dehzgY2anBfU3H+FfWHCVjhb9ZRYzahzNpvmMExTmMaeU11i51NJIMJPDctgLiP4+pCh53KIsLVQ66ucKyDNMA==",
+      "dependencies": [
+        "zod"
+      ],
+      "optionalPeers": [
+        "zod"
+      ]
+    },
+    "zod@4.6.7": {
+      "integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@supabase/functions-js@2",
+      "npm:@supabase/server@^1.9.2",
+      "npm:openai@^7.62.0",
+      "npm:zod@^4.6.7"
+    ]
+  }
+}
