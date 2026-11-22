@@ -42,7 +42,7 @@ supabase/
 
 ## Design
 
-Neutral surfaces, one brand blue, and a rainbow spectrum used only as an accent: the drifting aurora behind screen headers, the ring around the mic, progress bars and completed checks. Content always sits on solid cards, so text contrast never depends on the gradient. Gradients are React Native's built-in `backgroundImage` (no native gradient module) and motion is Reanimated 4: slow loops, springy presses, layout transitions when tasks move. Every looping animation holds still when the system's Reduce Motion setting is on.
+Neutral surfaces, one brand blue, and a rainbow spectrum used only as an accent: the drifting aurora behind screen headers, the ring around the mic, and progress bars. Completed checks are plain green. Content always sits on solid cards, so text contrast never depends on the gradient. Gradients are React Native's built-in `backgroundImage` (no native gradient module) and motion is Reanimated 4: slow loops, springy presses, layout transitions when tasks move. Every looping animation holds still when the system's Reduce Motion setting is on.
 
 ## One-time setup
 

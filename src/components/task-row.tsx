@@ -7,7 +7,7 @@ import Animated, { ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { PressableScale } from '@/components/ui/pressable-scale';
-import { gradient, Radius, RainbowVivid, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Task } from '@/lib/db';
 import { describeWhen } from '@/features/tasks/present';
@@ -103,8 +103,9 @@ function metaIcon(task: Task, problem: boolean) {
   return { ios: 'list.bullet', android: 'list' } as const;
 }
 
-/** Priority-colored ring; completing fills it with the rainbow and pops in a check. */
+/** Priority-colored ring; completing fills it green and pops in a check. */
 function CheckCircle({ done, ringColor, onPress }: { done: boolean; ringColor: string; onPress: () => void }) {
+  const theme = useTheme();
   return (
     <PressableScale
       accessibilityRole="checkbox"
@@ -115,7 +116,7 @@ function CheckCircle({ done, ringColor, onPress }: { done: boolean; ringColor: s
       onPress={onPress}
       style={[
         styles.check,
-        done ? { borderColor: 'transparent', backgroundImage: gradient(RainbowVivid, 135) } : { borderColor: ringColor },
+        done ? { borderColor: theme.success, backgroundColor: theme.success } : { borderColor: ringColor },
       ]}>
       {done && (
         <Animated.View entering={ZoomIn.springify().damping(12)} exiting={ZoomOut.duration(120)}>
