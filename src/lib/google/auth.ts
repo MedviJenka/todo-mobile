@@ -38,7 +38,8 @@ async function browserOAuth(calendarScopes: string[] | null): Promise<Session | 
   // Must match Supabase → Auth → URL Configuration → Redirect URLs, else Supabase falls back to the Site URL.
   if (__DEV__) console.log('Google redirectTo:', redirectTo);
 
-  const currentEmail = calendar ? (await supabase.auth.getSession()).data.session?.user.email : undefined;
+  const previousUser = calendar ? (await supabase.auth.getSession()).data.session?.user : undefined;
+  const currentEmail = previousUser?.email;
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -72,6 +73,12 @@ async function browserOAuth(calendarScopes: string[] | null): Promise<Session | 
 
   const exchange = await supabase.auth.exchangeCodeForSession(queryParams.code);
   if (exchange.error) throw new AppError('server_error', `Supabase sign-in failed: ${exchange.error.message}`);
+  // login_hint is only a hint: if another Google account was picked, its session just replaced the
+  // signed-in one. Drop it rather than attach a calendar grant to the wrong user.
+  if (previousUser && exchange.data.session.user.id !== previousUser.id) {
+    await supabase.auth.signOut({ scope: 'local' });
+    throw new AppError('google_error', 'Use the same Google account you signed in with.');
+  }
   return exchange.data.session;
 }
 
@@ -85,7 +92,8 @@ export async function signInWithGoogle(): Promise<boolean> {
 // ---------------------------------------------------------------------------------------------
 type Cached = { userId: string; token: string; expiresAt: number; scopes: string[] };
 let cached: Cached | null = null;
-let inflight: Promise<string> | null = null;
+type Inflight = { userId: string; promise: Promise<string> };
+let inflight: Inflight | null = null;
 
 async function currentUserId(): Promise<string> {
   const userId = (await supabase.auth.getSession()).data.session?.user.id;
@@ -143,12 +151,17 @@ export async function getAccessToken(): Promise<string> {
   const userId = await currentUserId();
   // Refresh a minute early so a token never expires mid-request.
   if (cached?.userId === userId && cached.expiresAt - 60_000 > Date.now()) return cached.token;
-  inflight ??= googleAccessToken({ action: 'refresh' })
-    .then((token) => remember(userId, token))
-    .finally(() => {
-      inflight = null;
-    });
-  return inflight;
+  if (inflight?.userId === userId) return inflight.promise;
+  const entry: Inflight = {
+    userId,
+    promise: googleAccessToken({ action: 'refresh' })
+      .then((token) => remember(userId, token))
+      .finally(() => {
+        if (inflight === entry) inflight = null;
+      }),
+  };
+  inflight = entry;
+  return entry.promise;
 }
 
 /** Call after Google answers 401 so the next getAccessToken() fetches a fresh token. */
@@ -158,10 +171,14 @@ export function invalidateAccessToken(token: string): void {
 
 export function forgetAccessToken(): void {
   cached = null;
+  inflight = null;
 }
 
-/** Removes the app's Google grant entirely (used by "Delete all data"). */
+/**
+ * Removes the app's Google grant entirely (used by "Delete all data"). Throws if the server
+ * couldn't revoke it, since its copy of the refresh token may then still exist.
+ */
 export async function revokeGoogleAccess(): Promise<void> {
   forgetAccessToken();
-  await revokeGoogleToken().catch(() => undefined);
+  await revokeGoogleToken();
 }

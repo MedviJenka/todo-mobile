@@ -8,7 +8,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
 
-import { apiError, json, log, rejectIfNotAllowed } from '../_shared/http.ts';
+import { apiError, json, log, readBody, rejectIfNotAllowed, USER_AUTH } from '../_shared/http.ts';
 import {
   GoogleTokenRequest,
   type GoogleAccessToken,
@@ -60,29 +60,42 @@ async function exchange(refreshToken: string): Promise<Exchange> {
 }
 
 export default {
-  fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+  fetch: withSupabase(USER_AUTH, async (req, ctx) => {
     if (req.method !== 'POST') return apiError('bad_request', 'Use POST.', 405);
 
-    const denied = rejectIfNotAllowed(ctx);
-    if (denied) return denied;
-
-    const parsed = GoogleTokenRequest.safeParse(await req.json().catch(() => null));
+    const body = await readBody(req, 8 * 1024);
+    if (!body) return apiError('payload_too_large', 'Request is too large.');
+    const parsed = GoogleTokenRequest.safeParse(await body.json().catch(() => null));
     if (!parsed.success) return apiError('bad_request', 'Invalid request.');
     const request = parsed.data;
 
-    // RLS scopes every query to the caller's own row.
-    const tokens = () => ctx.supabase.from('google_tokens');
+    // Revoking only deletes the caller's own grant, so "Delete all data" works for every account.
+    if (request.action !== 'revoke') {
+      const denied = rejectIfNotAllowed(ctx);
+      if (denied) return denied;
+    }
+
+    const userId = ctx.userClaims?.id;
+    if (!userId) return apiError('unauthorized', 'Please sign in again.');
+    // google_tokens has no grants for app users (a stolen session must not read the refresh
+    // token), so this uses the service role. Every query below is pinned to the caller's id.
+    const tokens = () => ctx.supabaseAdmin.from('google_tokens');
 
     if (request.action === 'connect') {
-      // user_id defaults to auth.uid(), so the upsert hits the caller's row.
-      const { error } = await tokens().upsert({ refresh_token: request.refreshToken }, { onConflict: 'user_id' });
+      const { error } = await tokens().upsert(
+        { user_id: userId, refresh_token: request.refreshToken },
+        { onConflict: 'user_id' }
+      );
       if (error) {
         log('google-token', 'store_failed', { code: error.code ?? null });
         return apiError('internal', 'Could not save Google access.');
       }
     }
 
-    const { data: row, error } = await tokens().select('user_id, refresh_token').maybeSingle();
+    const { data: row, error } = await tokens()
+      .select('user_id, refresh_token')
+      .eq('user_id', userId)
+      .maybeSingle();
     if (error) {
       log('google-token', 'read_failed', { code: error.code ?? null });
       return apiError('internal', 'Could not read Google access.');

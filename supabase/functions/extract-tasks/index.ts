@@ -4,20 +4,23 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
 
-import { apiError, json, log, rejectIfNotAllowed, rejectIfOverDailyCap } from '../_shared/http.ts';
+import { apiError, claimQuota, json, log, readBody, rejectIfNotAllowed, USER_AUTH } from '../_shared/http.ts';
 import { extractionModel, openai, reasoningEffort } from '../_shared/openai.ts';
 import { ExtractTasksRequest, type ExtractTasksResponse } from '../_shared/task-schema.ts';
 import { isValidTimeZone } from '../_shared/zoned-time.ts';
 import { ExtractionError, extractTasks } from './extract.ts';
 
 export default {
-  fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+  fetch: withSupabase(USER_AUTH, async (req, ctx) => {
     if (req.method !== 'POST') return apiError('bad_request', 'Use POST.', 405);
 
     const denied = rejectIfNotAllowed(ctx);
     if (denied) return denied;
 
-    const parsed = ExtractTasksRequest.safeParse(await req.json().catch(() => null));
+    // A full transcript is about 20 KB of UTF-8 at most.
+    const body = await readBody(req, 64 * 1024);
+    if (!body) return apiError('payload_too_large', 'Request is too large.');
+    const parsed = ExtractTasksRequest.safeParse(await body.json().catch(() => null));
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       return apiError('bad_request', `Invalid request: ${issue?.path.join('.') || 'body'} ${issue?.message ?? ''}`.trim());
@@ -25,22 +28,8 @@ export default {
     const input = parsed.data;
     if (!isValidTimeZone(input.timeZone)) return apiError('bad_request', 'Unknown time zone.');
 
-    // Typed input has no capture yet: record it (this also counts toward the daily cap).
     let captureId = input.captureId;
-    if (captureId === null) {
-      const capped = await rejectIfOverDailyCap(ctx);
-      if (capped) return capped;
-      const { data, error } = await ctx.supabase
-        .from('captures')
-        .insert({ transcript: input.transcript })
-        .select('id')
-        .single();
-      if (error || !data) {
-        log('extract-tasks', 'insert_failed', { code: error?.code ?? null });
-        return apiError('internal', 'Could not save the capture.');
-      }
-      captureId = data.id as string;
-    } else {
+    if (captureId !== null) {
       // RLS makes other users' captures invisible, so this is also the ownership check.
       const { data, error } = await ctx.supabase
         .from('captures')
@@ -52,6 +41,24 @@ export default {
         // The user edited the transcript before re-running: keep history in sync.
         await ctx.supabase.from('captures').update({ transcript: input.transcript }).eq('id', captureId);
       }
+    }
+
+    // Every extraction counts, re-runs of an existing capture included.
+    const capped = await claimQuota(ctx, 'extract');
+    if (capped) return capped;
+
+    // Typed input has no capture yet: record it.
+    if (captureId === null) {
+      const { data, error } = await ctx.supabase
+        .from('captures')
+        .insert({ transcript: input.transcript })
+        .select('id')
+        .single();
+      if (error || !data) {
+        log('extract-tasks', 'insert_failed', { code: error?.code ?? null });
+        return apiError('internal', 'Could not save the capture.');
+      }
+      captureId = data.id as string;
     }
 
     const started = Date.now();

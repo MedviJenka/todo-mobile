@@ -6,7 +6,9 @@
 import { z } from 'zod';
 
 export const MAX_TRANSCRIPT_CHARS = 5000;
-export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+// 180 s at the app's 64 kbps is about 1.5 MB. Low-bitrate files near a higher limit would hold
+// hours of billable audio.
+export const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 export const MAX_RECORDING_SECONDS = 180;
 export const MIN_TASK_MINUTES = 5;
 export const MAX_TASK_MINUTES = 480;
@@ -67,7 +69,7 @@ export type ExtractedTask = z.infer<typeof ExtractedTask>;
 
 export const ExtractionResult = z.object({
   tasks: z.array(ExtractedTask).max(30),
-  unparsed: z.array(z.string()),
+  unparsed: z.array(z.string().max(200)).max(20),
 });
 export type ExtractionResult = z.infer<typeof ExtractionResult>;
 
@@ -88,8 +90,8 @@ export const ExtractTasksRequest = z.object({
   timeZone: z.string().min(1).max(64),
   dayStart: z.string().regex(TIME_OF_DAY),
   dayEnd: z.string().regex(TIME_OF_DAY),
-  /** BCP-47, e.g. "en-GB" */
-  locale: z.string().min(2).max(35),
+  /** BCP-47, e.g. "en-GB". A tag shape only: it goes into the model instructions. */
+  locale: z.string().max(35).regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/),
 });
 export type ExtractTasksRequest = z.infer<typeof ExtractTasksRequest>;
 

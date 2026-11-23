@@ -5,13 +5,14 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { withSupabase } from '@supabase/server';
 
-import { apiError, json, log, rejectIfNotAllowed, rejectIfOverDailyCap } from '../_shared/http.ts';
+import { apiError, claimQuota, json, log, readBody, rejectIfNotAllowed, USER_AUTH } from '../_shared/http.ts';
 import { openai, sttModel } from '../_shared/openai.ts';
 import { MAX_AUDIO_BYTES, MAX_RECORDING_SECONDS, type TranscribeResponse } from '../_shared/task-schema.ts';
 
 const AUDIO_EXTENSIONS = new Set(['m4a', 'mp4', 'mp3', 'mpeg', 'mpga', 'wav', 'webm', 'ogg', 'flac']);
 // Multipart framing adds a little on top of the file itself.
 const MAX_BODY_BYTES = MAX_AUDIO_BYTES + 64 * 1024;
+const TOO_LARGE = `Recording is too large (max ${MAX_AUDIO_BYTES / (1024 * 1024)} MB).`;
 
 function parseLanguages(value: FormDataEntryValue | null): string[] {
   if (typeof value !== 'string') return [];
@@ -26,23 +27,18 @@ function parseSeconds(value: FormDataEntryValue | null): number | null {
 }
 
 export default {
-  fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+  fetch: withSupabase(USER_AUTH, async (req, ctx) => {
     if (req.method !== 'POST') return apiError('bad_request', 'Use POST.', 405);
 
     const denied = rejectIfNotAllowed(ctx);
     if (denied) return denied;
 
-    const declaredBytes = Number(req.headers.get('content-length') ?? 0);
-    if (declaredBytes > MAX_BODY_BYTES) {
-      return apiError('payload_too_large', 'Recording is too large (max 10 MB).');
-    }
-
-    const capped = await rejectIfOverDailyCap(ctx);
-    if (capped) return capped;
+    const body = await readBody(req, MAX_BODY_BYTES);
+    if (!body) return apiError('payload_too_large', TOO_LARGE);
 
     let form: FormData;
     try {
-      form = await req.formData();
+      form = await body.formData();
     } catch {
       return apiError('bad_request', 'Expected multipart/form-data with an "audio" file.');
     }
@@ -50,12 +46,16 @@ export default {
     const audio = form.get('audio');
     if (!(audio instanceof File)) return apiError('bad_request', 'Missing "audio" file.');
     if (audio.size === 0) return apiError('no_speech', 'The recording was empty.');
-    if (audio.size > MAX_AUDIO_BYTES) return apiError('payload_too_large', 'Recording is too large (max 10 MB).');
+    if (audio.size > MAX_AUDIO_BYTES) return apiError('payload_too_large', TOO_LARGE);
 
     const extension = audio.name.split('.').pop()?.toLowerCase() ?? '';
     if (!AUDIO_EXTENSIONS.has(extension)) {
       return apiError('unsupported_media_type', `Unsupported audio format ".${extension}".`);
     }
+
+    // Counted before the call: OpenAI bills silent or failed transcriptions too.
+    const capped = await claimQuota(ctx, 'transcribe');
+    if (capped) return capped;
 
     const model = sttModel();
     const languages = parseLanguages(form.get('languages'));

@@ -49,6 +49,8 @@ export async function extractTasks(
       text: { format: zodTextFormat(ModelExtractionResult, 'task_extraction') },
       // Don't keep transcripts on OpenAI's side longer than the request needs.
       store: false,
+      // Cost bound per call (reasoning included): a transcript can ask for an endless output.
+      max_output_tokens: 16_000,
     });
   } catch (error) {
     if (error instanceof OpenAI.APIError) {
@@ -85,7 +87,7 @@ export function cleanExtraction(
   timeZone: string
 ): ExtractionResult {
   const tasks: ExtractedTask[] = [];
-  const unparsed = raw.unparsed.map((fragment) => fragment.trim()).filter(Boolean);
+  const unparsed = raw.unparsed.map((fragment) => fragment.trim().slice(0, 200)).filter(Boolean);
 
   for (const task of raw.tasks) {
     const title = task.title.replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -117,5 +119,5 @@ export function cleanExtraction(
     else unparsed.push(title);
   }
 
-  return { tasks: tasks.slice(0, 30), unparsed };
+  return { tasks: tasks.slice(0, 30), unparsed: unparsed.slice(0, 20) };
 }

@@ -133,7 +133,7 @@ Install with `npx expo install …` (per AGENTS.md), never `npm install`.
 
 ### 6.1 `transcribe` Edge Function
 - Input: `multipart/form-data` with field `audio` (`capture.m4a`). Sent with plain `fetch` to `${SUPABASE_URL}/functions/v1/transcribe` with `Authorization: Bearer <session.access_token>` and `apikey` headers. (Whether `supabase.functions.invoke` accepts FormData isn't documented, so check it in Spike A or just use `fetch`.)
-- Checks: user JWT required, content type, size ≤ 10 MB, per-user cap (e.g. 50 captures/day → `429`).
+- Checks: user JWT required, content type, size ≤ 4 MB, per-user cap (e.g. 50 transcriptions/day → `429`).
 - Calls `gpt-transcribe`. Inserts a `captures` row (transcript, audio seconds). Returns `{ captureId, transcript }`.
 - **Never logs transcript text.** Logs only lengths and timings.
 
@@ -348,8 +348,8 @@ supabase/
   - `.env` is git-ignored and has never been committed (checked).
 - **Rename** `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` → `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without the prefix, Expo doesn't put them in the app at all.
 - **Move** server secrets to `supabase/functions/.env` (git-ignored) for local `supabase functions serve`.
-- **RLS on every table.** The functions use the user-scoped client from `withSupabase`, never the service role, for user data.
-- **Input caps:** audio ≤10 MB / ≤3 min, transcript ≤5,000 chars, ≤50 captures per user per day.
+- **RLS on every table.** The functions use the user-scoped client from `withSupabase` for user data. The service role touches only the server-only tables (`google_tokens`, `ai_usage`), always filtered to the caller's user id.
+- **Input caps:** audio ≤4 MB / ≤3 min, transcript ≤5,000 chars, ≤50 transcriptions and ≤50 extractions (re-runs included) per user per 24 h.
 - **Data flow:** audio and transcript go to OpenAI. Calendar data stays on the device (busy intervals only). Audio is deleted from the device cache after a successful transcription. Transcripts are kept as capture history, and the user can delete them.
 - **Account deletion** (Apple requires it in-app): delete the app calendar and all rows, then sign out.
 - **Disclosures:** a privacy policy covering microphone use, OpenAI processing and Google user data, plus App Store / Play data-safety forms. Microphone permission text goes in the `expo-audio` plugin `microphonePermission` option.

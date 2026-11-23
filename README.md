@@ -69,9 +69,10 @@ npx supabase functions deploy transcribe extract-tasks google-token
 Then in the dashboard:
 
 - **Authentication → Providers → Google**: enable it and paste the web client ID and secret.
+- **Authentication → Providers → Email**: turn it off. The app signs in with Google only, and the function allowlist trusts only Google-created accounts.
 - **Authentication → URL Configuration → Redirect URLs**: add `todo://**` (dev and release builds) and `exp://**` (Expo Go).
 
-`ALLOWED_EMAILS` restricts the functions (and so your OpenAI spend) to your own account. `MAX_CAPTURES_PER_DAY` caps usage per user (default 50).
+`ALLOWED_EMAILS` restricts the functions (and so your OpenAI spend) to your own Google account. It is required: unset means every request gets `403`; `ALLOWED_EMAILS=*` allows any signed-in user. `MAX_CAPTURES_PER_DAY` caps transcriptions and extractions (re-runs included) per user per 24 hours, each counted separately (default 50).
 
 ### 3. App environment
 

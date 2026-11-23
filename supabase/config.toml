@@ -226,7 +226,9 @@ web3 = 30
 [auth.email]
 # Allow/disallow the email provider. When false, users can't sign up or sign in with email.
 # To block new signups only, set enable_signup = false under [auth] instead.
-enabled = true
+# Off: the app signs in with Google only. With email on and confirmations off, anyone could sign
+# up as an ALLOWED_EMAILS address that has no account yet. Turn it off in the dashboard too.
+enabled = false
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -454,8 +456,9 @@ static_files = [ "./functions/extract-tasks/SKILL.md" ]
 # values in Dashboard > Authentication > Providers > Google.
 [auth.external.google]
 enabled = true
-client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Same Web OAuth client the google-token function uses, so one name each in .env and secrets.
+client_id = "env(EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)"
+secret = "env(GOOGLE_OAUTH_CLIENT_SECRET)"
 skip_nonce_check = false
 
 [functions.google-token]

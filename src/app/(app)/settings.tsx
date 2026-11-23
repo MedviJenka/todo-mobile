@@ -18,6 +18,7 @@ import { signOut } from '@/lib/auth';
 import { deleteAllUserData, type CalendarShare, type UserSettings } from '@/lib/db';
 import { deviceTimeZone } from '@/lib/device';
 import { describeError, toAppError } from '@/lib/errors';
+import { revokeGoogleAccess } from '@/lib/google/auth';
 import { APP_CALENDAR_NAME, deleteAppCalendar } from '@/lib/google/calendar';
 import { formatTimeOfDay, parseTimeOfDay } from '@/lib/time';
 import { useCalendarShares } from '@/features/sharing/use-calendar-shares';
@@ -80,9 +81,11 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
           calendarWarning = `${describeError(toAppError(e))} Delete the “${APP_CALENDAR_NAME}” calendar in Google Calendar yourself.`;
         }
       }
+      // Revoke before deleting data: if this fails, the server may still hold the Google grant.
+      await revokeGoogleAccess();
       await deleteAllUserData(session.user.id);
       if (calendarWarning) Alert.alert('Calendar not deleted', calendarWarning);
-      await signOut({ revokeGoogle: true });
+      await signOut();
     } catch (e) {
       setBusy(null);
       showError(e, "Couldn't delete your data");
