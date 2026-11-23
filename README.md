@@ -1,5 +1,20 @@
 # Voice To-Do
 
+[![CI](https://github.com/MedviJenka/todo-mobile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MedviJenka/todo-mobile/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![Expo SDK 58](https://img.shields.io/badge/Expo-SDK%2058-000020?logo=expo&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-3ecf8e?logo=supabase&logoColor=white)
+
+<!--
+Screenshots: put PNGs/GIFs in docs/screenshots/ and uncomment.
+<p align="center">
+  <img src="docs/screenshots/capture.gif" width="240" alt="Speaking tasks into the mic" />
+  <img src="docs/screenshots/tasks.png" width="240" alt="Task list scheduled into free time" />
+  <img src="docs/screenshots/calendar.png" width="240" alt="Tasks booked in Google Calendar" />
+</p>
+-->
+
 A personal iOS/Android app: tap the mic, say what you need to do, and it becomes tasks that are ordered and booked into free time in your Google Calendar, with an Undo. Built with **Expo SDK 58**, **Expo Router**, **Supabase** (auth, Postgres, Edge Functions) and **OpenAI** (speech-to-text + extraction). The full design is in [`docs/PRODUCT_PLAN.md`](docs/PRODUCT_PLAN.md).
 
 ```
