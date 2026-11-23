@@ -447,6 +447,8 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/extract-tasks/deno.json"
 entrypoint = "./functions/extract-tasks/index.ts"
+# The model instructions (read at startup by prompt.ts).
+static_files = [ "./functions/extract-tasks/SKILL.md" ]
 
 # Browser OAuth (signInWithOAuth + PKCE), Web client only. For the hosted project, set the same
 # values in Dashboard > Authentication > Providers > Google.

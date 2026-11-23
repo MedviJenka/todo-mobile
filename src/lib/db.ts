@@ -243,10 +243,59 @@ export async function saveSettings(settings: UserSettings): Promise<UserSettings
   return rowToSettings(data as SettingsRow);
 }
 
-/** Deletes every row the user owns (tasks, transcripts, settings). */
+/** Deletes every row the user owns (tasks, transcripts, shared contacts, settings). */
 export async function deleteAllUserData(userId: string): Promise<void> {
-  for (const table of ['tasks', 'captures', 'user_settings'] as const) {
+  for (const table of ['tasks', 'captures', 'calendar_shares', 'user_settings'] as const) {
     const { error } = await supabase.from(table).delete().eq('user_id', userId);
     if (error) fail(`delete ${table}`, error);
   }
+}
+
+// ---- Calendar shares ----------------------------------------------------------------------------
+
+export type ShareRole = 'reader' | 'freeBusyReader';
+
+/** A saved contact the "Voice To-Do" calendar is shared with. */
+export type CalendarShare = {
+  id: string;
+  name: string;
+  email: string;
+  role: ShareRole;
+  aclRuleId: string;
+};
+
+type ShareRow = { id: string; name: string; email: string; role: ShareRole; acl_rule_id: string };
+
+const SHARE_COLUMNS = 'id, name, email, role, acl_rule_id';
+const rowToShare = (row: ShareRow): CalendarShare => ({
+  id: row.id,
+  name: row.name,
+  email: row.email,
+  role: row.role,
+  aclRuleId: row.acl_rule_id,
+});
+
+export async function fetchShares(): Promise<CalendarShare[]> {
+  const { data, error } = await supabase.from('calendar_shares').select(SHARE_COLUMNS).order('name');
+  if (error) fail('load shared people', error);
+  return (data as ShareRow[]).map(rowToShare);
+}
+
+/** Saves a contact; sharing again with the same email updates the existing card. */
+export async function saveShare(share: Omit<CalendarShare, 'id'>): Promise<CalendarShare> {
+  const { data, error } = await supabase
+    .from('calendar_shares')
+    .upsert(
+      { name: share.name, email: share.email, role: share.role, acl_rule_id: share.aclRuleId },
+      { onConflict: 'user_id,email' }
+    )
+    .select(SHARE_COLUMNS)
+    .single();
+  if (error) fail('save the contact', error);
+  return rowToShare(data as ShareRow);
+}
+
+export async function deleteShare(id: string): Promise<void> {
+  const { error } = await supabase.from('calendar_shares').delete().eq('id', id);
+  if (error) fail('remove the contact', error);
 }
