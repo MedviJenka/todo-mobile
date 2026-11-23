@@ -21,6 +21,9 @@ export const CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar.freebusy',
 ];
 
+/** Asked for only when the user first shares the calendar: managing who can see it. */
+export const SHARING_SCOPE = 'https://www.googleapis.com/auth/calendar.acls';
+
 // Supabase rejects redirect URLs whose host is a bare IP, which is what Expo Go uses on a LAN
 // (exp://10.0.0.4:8081/--/). nip.io is public DNS that maps 10.0.0.4.nip.io back to 10.0.0.4,
 // so the URL still points at this Metro server but passes the allow list (exp://**).
@@ -29,7 +32,8 @@ function withHostname(url: string) {
 }
 
 /** Runs the browser OAuth round trip. Returns null if the user backs out. */
-async function browserOAuth(calendar: boolean): Promise<Session | null> {
+async function browserOAuth(calendarScopes: string[] | null): Promise<Session | null> {
+  const calendar = calendarScopes !== null;
   const redirectTo = withHostname(Linking.createURL('/'));
   // Must match Supabase → Auth → URL Configuration → Redirect URLs, else Supabase falls back to the Site URL.
   if (__DEV__) console.log('Google redirectTo:', redirectTo);
@@ -41,7 +45,7 @@ async function browserOAuth(calendar: boolean): Promise<Session | null> {
       redirectTo,
       skipBrowserRedirect: true,
       ...(calendar && {
-        scopes: CALENDAR_SCOPES.join(' '),
+        scopes: calendarScopes.join(' '),
         queryParams: {
           // offline + consent makes Google return a refresh token every time.
           access_type: 'offline',
@@ -73,13 +77,13 @@ async function browserOAuth(calendar: boolean): Promise<Session | null> {
 
 /** Interactive sign-in. Returns false if the user backs out. */
 export async function signInWithGoogle(): Promise<boolean> {
-  return (await browserOAuth(false)) !== null;
+  return (await browserOAuth(null)) !== null;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Calendar access tokens: cached in memory per user, minted by the google-token function.
 // ---------------------------------------------------------------------------------------------
-type Cached = { userId: string; token: string; expiresAt: number };
+type Cached = { userId: string; token: string; expiresAt: number; scopes: string[] };
 let cached: Cached | null = null;
 let inflight: Promise<string> | null = null;
 
@@ -89,14 +93,29 @@ async function currentUserId(): Promise<string> {
   return userId;
 }
 
-function remember(userId: string, token: { accessToken: string; expiresIn: number }): string {
-  cached = { userId, token: token.accessToken, expiresAt: Date.now() + token.expiresIn * 1000 };
+function remember(userId: string, token: { accessToken: string; expiresIn: number; scopes: string[] }): string {
+  cached = { userId, token: token.accessToken, expiresAt: Date.now() + token.expiresIn * 1000, scopes: token.scopes };
   return token.accessToken;
 }
 
 /** The "Connect calendar" step. Shows Google's consent screen. */
 export async function requestCalendarAccess(): Promise<void> {
-  const session = await browserOAuth(true);
+  await grantScopes(CALENDAR_SCOPES);
+}
+
+/** Adds the sharing permission on top of calendar access. Shows Google's consent screen. */
+export async function requestSharingAccess(): Promise<void> {
+  await grantScopes([...CALENDAR_SCOPES, SHARING_SCOPE]);
+}
+
+/** Whether the current Google grant includes `scope`. */
+export async function hasGrantedScope(scope: string): Promise<boolean> {
+  await getAccessToken();
+  return cached?.scopes.includes(scope) ?? false;
+}
+
+async function grantScopes(scopes: string[]): Promise<void> {
+  const session = await browserOAuth(scopes);
   if (!session) throw new AppError('cancelled', 'Calendar access was not granted.');
   const refreshToken = session.provider_refresh_token;
   if (!refreshToken) throw new AppError('google_error', "Google didn't grant offline access. Try again.");
@@ -107,6 +126,13 @@ export async function requestCalendarAccess(): Promise<void> {
     throw new AppError(
       'google_error',
       'Google Calendar access wasn’t granted. Tap Connect again and tick both Calendar boxes on Google’s screen.'
+    );
+  }
+  if (scopes.includes(SHARING_SCOPE) && !token.scopes.includes(SHARING_SCOPE)) {
+    remember(session.user.id, token);
+    throw new AppError(
+      'google_error',
+      'Sharing permission wasn’t granted. Try again and tick the “sharing permissions” box on Google’s screen.'
     );
   }
   remember(session.user.id, token);
