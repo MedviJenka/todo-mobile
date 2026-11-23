@@ -2,20 +2,25 @@ import { useState, type ReactNode } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ROLE_OPTIONS, ShareSheet } from '@/components/share-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Aurora } from '@/components/ui/aurora';
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
+import { PressableScale } from '@/components/ui/pressable-scale';
 import { Stepper } from '@/components/ui/stepper';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
 import { useErrorAlert } from '@/hooks/use-error-alert';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/lib/auth';
-import { deleteAllUserData, type UserSettings } from '@/lib/db';
+import { deleteAllUserData, type CalendarShare, type UserSettings } from '@/lib/db';
 import { deviceTimeZone } from '@/lib/device';
 import { describeError, toAppError } from '@/lib/errors';
 import { APP_CALENDAR_NAME, deleteAppCalendar } from '@/lib/google/calendar';
 import { formatTimeOfDay, parseTimeOfDay } from '@/lib/time';
+import { useCalendarShares } from '@/features/sharing/use-calendar-shares';
 import { useAuth } from '@/providers/auth-provider';
 import { useReadySettings, useSettings } from '@/providers/settings-provider';
 
@@ -154,6 +159,8 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
           <Button title="Reconnect calendar" onPress={markCalendarDisconnected} style={styles.save} />
         </Section>
 
+        <SharingSection calendarId={saved.appCalendarId!} />
+
         <Section title="Account" footer="Audio is never stored. Transcripts are kept as capture history until you delete your data.">
           <View style={styles.row}>
             <ThemedText>Signed in as</ThemedText>
@@ -176,6 +183,84 @@ function SettingsForm({ saved }: { saved: UserSettings }) {
         </Section>
       </ScrollView>
     </ThemedView>
+  );
+}
+
+function SharingSection({ calendarId }: { calendarId: string }) {
+  const theme = useTheme();
+  const showError = useErrorAlert();
+  const { shares, loadError, share, remove } = useCalendarShares(calendarId);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  function confirmRemove(person: CalendarShare) {
+    Alert.alert(`Stop sharing with ${person.name}?`, `${person.email} will no longer see the “${APP_CALENDAR_NAME}” calendar.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Stop sharing',
+        style: 'destructive',
+        onPress: async () => {
+          setRemoving(person.id);
+          await remove(person).catch((e) => showError(e, "Couldn't stop sharing"));
+          setRemoving(null);
+        },
+      },
+    ]);
+  }
+
+  return (
+    <Section title="Sharing" footer={`People here can see the “${APP_CALENDAR_NAME}” calendar in their own Google Calendar.`}>
+      {loadError && (
+        <ThemedText type="small" style={[styles.shareNote, { color: theme.danger }]}>
+          {describeError(loadError)}
+        </ThemedText>
+      )}
+      {shares?.length === 0 && (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.shareNote}>
+          Not shared with anyone yet.
+        </ThemedText>
+      )}
+      {shares?.map((person) => (
+        <View key={person.id} style={[styles.person, { backgroundColor: theme.backgroundElement }]}>
+          <Avatar name={person.name} />
+          <View style={styles.personText}>
+            <ThemedText type="smallBold" numberOfLines={1}>
+              {person.name}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {person.email}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {ROLE_OPTIONS.find((o) => o.value === person.role)?.label}
+            </ThemedText>
+          </View>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`Stop sharing with ${person.name}`}
+            disabled={removing === person.id}
+            onPress={() => confirmRemove(person)}
+            hitSlop={8}
+            scaleTo={0.9}
+            style={[styles.removeButton, removing === person.id && styles.dim]}>
+            <Icon ios="trash" android="delete" size={18} color={theme.danger} />
+          </PressableScale>
+        </View>
+      ))}
+      <Button title="Share with someone" onPress={() => setAdding(true)} style={styles.save} />
+      {adding && (
+        <ShareSheet
+          onCancel={() => setAdding(false)}
+          onSubmit={async (input) => {
+            try {
+              await share(input);
+              setAdding(false);
+            } catch (e) {
+              showError(e, "Couldn't share the calendar");
+            }
+          }}
+        />
+      )}
+    </Section>
   );
 }
 
@@ -218,4 +303,17 @@ const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
   save: { marginVertical: Spacing.two },
   buttons: { gap: Spacing.two, paddingBottom: Spacing.two },
+  shareNote: { paddingVertical: Spacing.two },
+  person: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    marginTop: Spacing.two,
+    borderRadius: Radius.medium,
+    borderCurve: 'continuous',
+  },
+  personText: { flex: 1, gap: 1 },
+  removeButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  dim: { opacity: 0.4 },
 });

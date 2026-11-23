@@ -1,6 +1,7 @@
 /**
  * Google Calendar API v3, called from the device (D2: calendar data never reaches our server).
- * Scopes: calendar.app.created (the app's own calendar + its events) and calendar.freebusy.
+ * Scopes: calendar.app.created (the app's own calendar + its events) and calendar.freebusy,
+ * plus calendar.acls once the user shares the calendar.
  */
 import { AppError } from '@/lib/errors';
 import type { Interval } from '@/lib/scheduler/plan-schedule';
@@ -212,3 +213,55 @@ export async function deleteEvent(calendarId: string, eventId: string): Promise<
 }
 
 export { isGone as isGoogleNotFound };
+
+// ---- Sharing (calendar.acls) ---------------------------------------------------------------------
+
+/**
+ * Gives `email` access to the app calendar, or changes the access they already have. Google emails
+ * them a link to add it to their own Google Calendar. Returns the ACL rule id.
+ */
+export async function shareAppCalendar(
+  calendarId: string,
+  email: string,
+  role: 'reader' | 'freeBusyReader'
+): Promise<string> {
+  const rule = await googleFetch<{ id: string }>(`/calendars/${enc(calendarId)}/acl`, {
+    method: 'POST',
+    body: { role, scope: { type: 'user', value: email } },
+  });
+  return rule.id;
+}
+
+/** Removes someone's access. Already removed (e.g. in Google Calendar) counts as done. */
+export async function unshareAppCalendar(calendarId: string, ruleId: string): Promise<void> {
+  try {
+    await googleFetch(`/calendars/${enc(calendarId)}/acl/${enc(ruleId)}`, { method: 'DELETE' });
+  } catch (error) {
+    if (!isGone(error)) throw error;
+  }
+}
+
+// ---- Event guests -------------------------------------------------------------------------------
+
+export type Attendee = {
+  email: string;
+  displayName?: string;
+  responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted';
+};
+
+export async function getEventAttendees(calendarId: string, eventId: string): Promise<Attendee[]> {
+  const event = await googleFetch<{ attendees?: Attendee[] }>(`/calendars/${enc(calendarId)}/events/${enc(eventId)}`, {
+    query: { fields: 'attendees(email,displayName,responseStatus)' },
+  });
+  return event.attendees ?? [];
+}
+
+/** Replaces the guest list; Google emails new guests an invite (and removed ones a cancellation). */
+export async function setEventAttendees(calendarId: string, eventId: string, attendees: Attendee[]): Promise<Attendee[]> {
+  const event = await googleFetch<{ attendees?: Attendee[] }>(`/calendars/${enc(calendarId)}/events/${enc(eventId)}`, {
+    method: 'PATCH',
+    query: { sendUpdates: 'all', fields: 'attendees(email,displayName,responseStatus)' },
+    body: { attendees: attendees.map(({ email, displayName }) => ({ email, ...(displayName && { displayName }) })) },
+  });
+  return event.attendees ?? [];
+}
